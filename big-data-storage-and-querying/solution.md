@@ -2,167 +2,99 @@
 
 ## Architectural Design
 
-### 1. Storage Architecture
-To efficiently store and manage log data, the following structures are proposed:
+### Data Ingestion
 
-#### Distributed Storage:
-- **Hadoop Distributed File System (HDFS):** A distributed file system for big data processing.
-- **Amazon S3 or Google Cloud Storage:** Cloud-based storage for high availability.
-- Data is stored compressed using **gzip**.
+The ingestion process requires automation to collect log files from an NFS server and load them into a distributed storage system.
 
-#### Table Format:
-Using columnar formats such as Apache Parquet or ORC improves query performance. For example:
-
-```sql
-CREATE TABLE logs (
-    logType STRING,
-    logId STRING,
-    timestamp TIMESTAMP,
-    message STRING
-)
-STORED AS PARQUET;
-```
-
-#### Partitioning:
-Log data is partitioned by `logType` and `date`. This allows queries to focus on specific log types and dates.
-```sql
-PARTITION BY (logType, date)
-```
+- **Tools**:
+  - Apache Nifi, Flume or tools like Cloudera DataFlow can automate log ingestion.
+  - Oracle Data Integrator (ODI) can also be used for integration pipelines if needed.
+- **Process**:
+  - Files are scanned in specified folder structures on the NFS server.
+  - Logs are batched and loaded into distributed storage (HDFS or S3-compatible object storage).
+  - Metadata is extracted and indexed during ingestion.
+- **Disaster Recovery**:
+  - Ingestion workflows should include retry mechanisms for failed tasks.
+  - Replication of ingestion pipelines across multiple availability zones.
 
 ---
 
-### 2. Data Processing Architecture
-**Apache Spark** is recommended for query and data processing:
+### Data Storage
 
-#### Batch Processing:
-Historical logs stored in HDFS or S3 are processed using **Spark SQL**. For example, to query a week's worth of data:
-```sql
-SELECT * 
-FROM logs 
-WHERE date BETWEEN '2024-01-01' AND '2024-01-07'
-AND logType = 'firewall';
-```
+Logs must be stored in a queryable format with partitioning by date and log type to optimize query performance.
 
-#### Indexing:
-An **Elasticsearch** search engine is recommended to improve queryability of logs. Each log entry is indexed into Elasticsearch for fast querying:
-```json
-{
-  "logId": "12345",
-  "logType": "firewall",
-  "timestamp": "2024-01-01T12:34:56",
-  "message": "Log message here"
-}
-```
-
-#### Streaming Processing:
-For daily incoming logs, **Apache Kafka** or **Apache Flink** can be used for real-time analytics. Incoming logs are prioritized based on defined rules (e.g., SLAs).
+- **Storage Technologies**:
+  - **On-premise**: HDFS (Hadoop Distributed File System) in a Cloudera ecosystem.
+  - **Cloud-based**: S3-compatible object storage such as Amazon S3, MinIO, or Google Cloud Storage.
+- **File Formats**: Parquet or ORC for efficient columnar storage and compression.
+- **Partitioning**: Data should be partitioned by date and log type to enhance retrieval speed.
+- **Retention**:
+  - Implement lifecycle policies to delete logs after 2 years.
+- **Disaster Recovery**:
+  - Use replication mechanisms provided by HDFS or S3-compatible systems.
+  - Periodic snapshots and backups should be stored in geographically distant locations.
 
 ---
 
-### 3. Query Architecture
-To meet SLA requirements:
+### Data Processing and Querying
 
-#### Pre-Aggregation:
-Daily or weekly summary data is created and stored in a separate table. For example:
-```sql
-CREATE TABLE weekly_summary AS
-SELECT logType, COUNT(*) AS logCount
-FROM logs
-WHERE date BETWEEN '2024-01-01' AND '2024-01-07'
-GROUP BY logType;
-```
+Data querying depends on the storage backend, with different technologies for HDFS and object storage.
 
-#### Query Optimization:
-Query performance on Spark SQL is enhanced using techniques such as `broadcast join` and `predicate pushdown`. For example:
-```sql
-SET spark.sql.autoBroadcastJoinThreshold = -1;
-```
-
-#### Caching:
-Frequently used queries are cached on **Redis** or **Apache Ignite** for faster retrieval.
+1. **HDFS Storage**:
+   - Use Apache Hive or Apache Impala for SQL-based querying.
+   - Apache Spark SQL can handle more complex analytical queries.
+2. **S3-Compatible Object Storage**:
+   - Utilize Presto/Trino for distributed SQL querying.
+   - Apache Spark can access S3 storage for ETL tasks.
+3. **Elasticsearch Integration**:
+   - Logs can also be indexed into Elasticsearch for fast text-based searches and analytics.
+   - Elastic can complement the data warehouse by providing search capabilities.
+- **Disaster Recovery**:
+  - Deploy distributed query engines with redundancy.
+  - Regularly back up metadata and query configurations.
 
 ---
 
-### 4. Disaster Recovery
-To prevent downtime and data loss:
+### Middleware and Query Interface
 
-#### Data Replication:
-Data is stored with 3 replicas on HDFS or S3. For example, for HDFS:
-```xml
-<property>
-    <name>dfs.replication</name>
-    <value>3</value>
-</property>
-```
+An API layer serves as the interface for users to interact with the query engine and access the data.
 
-#### Backup:
-Weekly backups are stored on a cost-effective cloud solution like **Amazon Glacier**.
-
-#### Failover:
-**Apache Spark** operates in high availability mode. If a Spark Driver crashes, another driver is automatically activated.
+- **API Frameworks**:
+  - Spring Boot or FastAPI for building RESTful APIs.
+- **Caching Utilities**:
+  - Redis for caching frequently accessed query results or data.
+- **Interactive Querying**:
+  - Tools like Apache Superset or Metabase for dashboards and direct query execution.
+- **Deployment**:
+  - Kubernetes can be used to deploy and manage API services for scalability and failover handling.
+- **Elasticsearch Integration**:
+  - APIs can directly connect to Elasticsearch for specific log-type queries with low latency.
+- **Disaster Recovery**:
+  - Deploy the middleware in a multi-region Kubernetes cluster.
+  - Use rolling backups for API service configurations.
 
 ---
 
-### 5. Monitoring and Management
+## Monitoring and Management
 To monitor system performance and ensure SLA compliance:
 
-#### Monitoring Tools:
+### Monitoring Tools:
 - **Prometheus and Grafana:** Used to monitor Spark jobs, HDFS status, and Elasticsearch performance.
 
-#### Alerting:
+### Alerting:
 - Alerts are sent via email or SMS if queries exceed SLA thresholds or if a server fails.
 
 ---
 
-## Technologies and Tools
+## Recommended Technologies and Resources
 
-| Component               | Technology              |
-|-------------------------|-------------------------|
-| **Storage**             | HDFS, Amazon S3        |
-| **Data Processing**     | Apache Spark           |
-| **Search and Indexing** | Elasticsearch          |
-| **Streaming Processing**| Apache Kafka, Flink    |
-| **Monitoring**          | Prometheus, Grafana    |
-| **Disaster Recovery**   | HDFS Replication, Glacier Backup |
+| **Component**            | **Technology**                                | **Resource**                                         |
+|---------------------------|-----------------------------------------------|-----------------------------------------------------|
+| Data Ingestion            | Apache Nifi, Flume, ODI                    | Multi-core CPUs, 64 GB RAM, scalable storage       |
+| Storage                   | HDFS, Amazon S3, MinIO                       | At least 15 PB distributed storage with replication|
+| Query Engines             | Apache Hive, Trino, Apache Spark, Elasticsearch | 128 GB RAM per node, scalable cluster             |
+| Middleware/API Layer      | Spring Boot, FastAPI, Redis                  | 64 GB RAM, Kubernetes-based deployment            |
+| Interactive Querying      | Apache Superset, Metabase                    | Moderate resources for dashboard visualization     |
+| Disaster Recovery Storage | Cloud Storage or On-prem Backup Nodes        | Cross-region storage, regular snapshots            |
 
----
-
-## Pseudocode Example
-
-```python
-from pyspark.sql import SparkSession
-
-# Create SparkSession
-spark = SparkSession.builder \
-    .appName("BigDataLogProcessing") \
-    .getOrCreate()
-
-# Load daily logs
-daily_logs = spark.read.format("parquet").load("/path/to/logs/2024-01-01")
-
-# Create weekly summary
-weekly_summary = daily_logs \
-    .groupBy("logType") \
-    .count() \
-    .withColumnRenamed("count", "logCount")
-
-# Save weekly summary data
-weekly_summary.write.format("parquet").save("/path/to/summary/2024-week1")
-
-# Send data to Elasticsearch
-from elasticsearch import Elasticsearch
-
-es = Elasticsearch([{"host": "localhost", "port": 9200}])
-for row in daily_logs.collect():
-    es.index(index="logs", id=row["logId"], body=row.asDict())
-```
-
----
-
-## Results
-- **Storage**: Data is stored in a compressed and partitioned format using HDFS and Parquet.
-- **Querying**: Elasticsearch enables fast querying, while Spark SQL handles large-scale data analysis.
-- **Performance**: Pre-aggregation and partitioning techniques ensure fast results that comply with SLAs.
-- **Resilience**: Data loss is prevented through HDFS replication and cloud-based backups.
-
-This architecture is optimized for storing large log data and querying it efficiently within the given SLA requirements.
+This architecture ensures scalability, adheres to SLA requirements, and incorporates robust disaster recovery mechanisms for high reliability.
