@@ -98,3 +98,7 @@ To monitor system performance and ensure SLA compliance:
 | Disaster Recovery Storage | Cloud Storage or On-prem Backup Nodes        | Cross-region storage, regular snapshots            |
 
 This architecture ensures scalability, adheres to SLA requirements, and incorporates robust disaster recovery mechanisms for high reliability.
+
+## Topology
+
+![Big Data Architecture](./BigDataArchitecture.png)

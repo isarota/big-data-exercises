@@ -65,5 +65,3 @@ The application is accessed through an interface, where N different users can su
 
 ### Process
 FIFO Queue --> [Get] --> Running Jobs
-
-
